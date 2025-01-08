@@ -1,0 +1,204 @@
+---
+title: "factor_analysis"
+output: pdf_document
+date: "2025-01-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#svd analysis
+
+## get the data
+``` {r, message = FALSE}
+
+library(readxl)
+library(statnet)
+library(igraph)
+library(intergraph)
+
+data_usa <- read_excel("/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_usa0104.xlsx")
+matrix_two_mode <- as.matrix(data_usa)
+
+tdata_usa <- read_excel("/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/transposed_ce_matrix_usa0105.xlsx")
+matrix_two_mode <- as.matrix(data_usa)
+tmatrix_two_mode <- as.matrix(tdata_usa)
+```
+
+
+```{r}
+#construct a function to convert data type
+convert_to_numeric_matrix <- function(matrix_two_mode) {
+ 
+  
+  issue_labels <- colnames(matrix_two_mode)[-1]
+  
+  country_labels <- matrix_two_mode[, 1]
+  
+  numeric_data <- matrix_two_mode[, -1]
+  numeric_data <- apply(numeric_data, c(1, 2), trimws)
+  
+  numeric_matrix <- apply(numeric_data, 2, as.numeric)
+  length(country_labels) 
+  dim(numeric_matrix)
+  rownames(numeric_matrix) <- country_labels
+  colnames(numeric_matrix) <- issue_labels
+  return(numeric_matrix)
+}
+
+```
+
+
+```{r}
+#convert data type in matrix
+
+numeric_matrix <- convert_to_numeric_matrix(matrix_two_mode)
+
+tnumeric_matrix <- convert_to_numeric_matrix(tmatrix_two_mode)
+print(tnumeric_matrix)
+```
+
+```{r}
+
+
+# 步骤 1: 标准化矩阵 residuals
+O <- numeric_matrix / sum(numeric_matrix)         # 原始概率矩阵
+E <- rowSums(O) %o% colSums(O)                   # 期望值矩阵
+Z <- (O - E) / sqrt(E)                           # 标准化残差矩阵
+
+# 步骤 2: 计算SVD
+SVD <- svd(Z)
+
+# 输出 SVD 结果
+cat("Singular values (d):\n")
+print(SVD$d)   # 奇异值
+cat("\nLeft singular vectors (u):\n")
+print(SVD$u)   # 左奇异向量
+cat("\nRight singular vectors (v):\n")
+print(SVD$v)   # 右奇异向量
+
+
+# 步骤 4: 计算方差解释比例
+variance_explained <- prop.table(SVD$d^2)  # 方差比例
+cat("\nVariance explained by each singular value:\n")
+print(variance_explained)
+
+# 步骤 5: 可选 - 只使用前 k 个奇异值进行降维重构
+k <- 4  # 设置保留的维度数
+U_k <- SVD$u[, 1:k]  # 左奇异向量 (行向量)
+V_k <- SVD$v[, 1:k]  # 右奇异向量 (列向量)
+Sigma_k <- diag(SVD$d[1:k])  # 前两个奇异值对角矩阵
+
+# 步骤 2: 计算 Row Scores 和 Column Scores
+# Row Scores = U_k * Sigma_k
+row_scores <- U_k %*% Sigma_k
+
+# Column Scores = V_k * Sigma_k
+column_scores <- V_k %*% Sigma_k
+
+# 输出结果
+cat("\nRow Scores (First 2 dimensions):\n")
+print(row_scores)
+
+cat("\nColumn Scores (First 2 dimensions):\n")
+print(column_scores)
+```
+```{r}
+#convert data type in matrix
+
+numeric_matrix <- convert_to_numeric_matrix(matrix_two_mode)
+```
+
+
+
+```{r}
+# 输出结果
+cat("\nRow Scores (First 4 dimensions):\n")
+print(row_scores)
+
+cat("\nColumn Scores (First 4 dimensions):\n")
+print(column_scores)
+
+write.csv(row_scores, file = "row_scores.csv", row.names = rownames(numeric_matrix))
+write.csv(column_scores, file = "column_scores.csv", row.names = colnames(numeric_matrix))
+```
+
+```{r}
+# Clustering function
+cluster_data <- function(scores) {
+  # Initialize groups as a list with four empty groups
+  groups <- list(
+    group1 = integer(0),
+    group2 = integer(0),
+    group3 = integer(0),
+    group4 = integer(0)
+  )
+  
+  # Iterate through each row of the scores matrix
+  for (i in 1:nrow(scores)) {
+    max_dim <- which.max(scores[i, ]) # Find the index of the max value (1-based in R)
+    group_name <- paste0("group", max_dim) # Determine the group name
+    groups[[group_name]] <- c(groups[[group_name]], i) # Append the row index to the group
+  }
+  
+  return(groups) # Return the groups
+}
+row_groups = cluster_data(row_scores)
+col_groups = cluster_data(column_scores)
+row_groups
+col_groups
+
+
+  
+```
+```{r}
+
+print(rownames(numeric_matrix))
+```
+
+#factor analysis
+
+
+
+```{r}
+
+# 执行因子分析，设定因子数 (k = 4)
+result_f <- factanal(numeric_matrix, factors = 4, rotation = "varimax")
+
+# 查看因子载荷矩阵（loadings）
+print("Factor loadings:")
+print(result_f$loadings)
+
+# 查看因子解释的方差比例
+print("Proportion of variance explained:")
+print(result_f$variance)
+
+
+
+```
+Factor1: 社会服务与基础设施 （合并了svd的group1&4）
+话题：
+healthcare (载荷：0.746)
+publicorder (载荷：0.727)
+civil_liberties (载荷：0.757)
+education (载荷：0.744)
+infrastructure (载荷：0.753)
+poverty (载荷：0.724)
+disaster (载荷：0.717)
+
+Factor2: 经济与环境（合并了svd的group2&3）
+话题：
+economy (载荷：0.768)
+military&terrorism (载荷：0.746)
+borderissues (载荷：0.749)
+environment (载荷：0.730)
+politics (载荷：0.705)
+religion (载荷：0.708)
+media/internet (载荷：0.711)
+
+
+#对于转置后的矩阵，协方差矩阵是奇异的（不可逆），意味着协方差矩阵没有满秩，其数学特性导致它无法计算逆矩阵
+
+
