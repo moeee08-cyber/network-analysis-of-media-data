@@ -1,0 +1,364 @@
+---
+title: "qap_usa_canada"
+output:
+  pdf_document:
+    latex_engine: xelatex
+date: "2025-01-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+## get the data
+``` {r, message = FALSE}
+
+library(readxl)
+library(statnet)
+library(igraph)
+library(intergraph)
+
+data_usa_ce <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_usa0104.xlsx", sheet = "ce")
+
+data_usa_cc <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_usa0104.xlsx", sheet = "cc")
+
+data_usa_ii <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_usa0104.xlsx", sheet = "ii")
+
+data_usa_combined <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_usa0104.xlsx", sheet = "combined")
+
+data_canada_ce <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory\ analysis/canada_cecorrelation_matrix_0105.xlsx", sheet = "ce")
+
+data_canada_combined <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory\ analysis/canada_cecorrelation_matrix_0105.xlsx", sheet = "combined")
+
+
+data_canada_ii <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory\ analysis/canada_cecorrelation_matrix_0105.xlsx", sheet = "ii")
+
+data_canada_cc <- read_excel(path = "/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory\ analysis/canada_cecorrelation_matrix_0105.xlsx", sheet = "cc")
+
+
+data_china_ce <- read_excel("/Users/wumengmeng/Desktop/project-MediaAgenda/two-mode/step1testcode/step2_code_data/exploratory analysis/ce_cor_matrix_china.xlsx")
+
+```
+
+
+```{r}
+matrix_data_usa_ce <- as.matrix(data_usa_ce)
+
+matrix_data_canada_ce <- as.matrix(data_canada_ce)
+
+matrix_data_china_ce <- as.matrix(data_china_ce)
+
+matrix_data_usa_ii <- as.matrix(data_usa_ii)
+matrix_data_usa_cc <- as.matrix(data_usa_cc)
+
+matrix_data_canada_ii <- as.matrix(data_canada_ii)
+matrix_data_canada_cc <- as.matrix(data_canada_cc)
+
+matrix_data_usa_combined <- as.matrix(data_usa_combined)
+matrix_data_canada_combined <- as.matrix(data_canada_combined)
+```
+
+
+
+```{r}
+#construct a function to convert data type
+convert_to_numeric_matrix <- function(matrix_two_mode) {
+ 
+  
+  issue_labels <- colnames(matrix_two_mode)[-1]
+  
+  country_labels <- matrix_two_mode[, 1]
+  
+  numeric_data <- matrix_two_mode[, -1]
+  numeric_data <- apply(numeric_data, c(1, 2), trimws)
+  
+  numeric_matrix <- apply(numeric_data, 2, as.numeric)
+  length(country_labels) 
+  dim(numeric_matrix)
+  rownames(numeric_matrix) <- country_labels
+  colnames(numeric_matrix) <- issue_labels
+  return(numeric_matrix)
+}
+
+```
+
+
+```{r}
+#convert data type in matrix
+
+numeric_matrix_usa_ce <- convert_to_numeric_matrix(matrix_data_usa_ce)
+numeric_matrix_usa_cc <- convert_to_numeric_matrix(matrix_data_usa_cc)
+numeric_matrix_usa_ii <- convert_to_numeric_matrix(matrix_data_usa_ii)
+numeric_matrix_canada_ce <- convert_to_numeric_matrix(matrix_data_canada_ce)
+numeric_matrix_canada_cc <- convert_to_numeric_matrix(matrix_data_canada_cc)
+numeric_matrix_canada_ii <- convert_to_numeric_matrix(matrix_data_canada_ii)
+numeric_matrix_china_ce <- convert_to_numeric_matrix(matrix_data_china_ce)
+
+numeric_matrix_usa_combined <- convert_to_numeric_matrix(matrix_data_usa_combined)
+numeric_matrix_canada_combined <- convert_to_numeric_matrix(matrix_data_canada_combined)
+```
+
+
+```{r}
+# 标准化矩阵的函数
+normalize_matrix <- function(matrix) {
+  # 原始概率矩阵
+  O <- matrix / sum(matrix) 
+  
+  # 期望值矩阵
+  E <- outer(rowSums(O), colSums(O)) 
+  
+  # 处理 E 中的零值，避免除以零
+  Z <- (O - E) / sqrt(E)
+  Z[is.infinite(Z) | is.nan(Z)] <- 0 # 将 NaN 或 Inf 替换为 0
+  
+  return(Z)
+}
+
+```
+
+
+#标准化combined_matrix的函数
+```{r}
+# 标准化矩阵的函数，支持四个步骤的连续操作
+normalize_matrix_in_steps <- function(matrix) {
+  # 步骤 1: 标准化 1:43 行和 1:43 列
+  matrix <- normalize_submatrix(matrix, 1:43, 1:43)
+  
+  # 步骤 2: 标准化 44:57 行和 44:57 列
+  matrix <- normalize_submatrix(matrix, 44:57, 44:57)
+  
+  # 步骤 3: 标准化 44:57 行和 1:43 列
+  matrix <- normalize_submatrix(matrix, 44:57, 1:43)
+  
+  # 步骤 4: 标准化 1:43 行和 44:57 列
+  matrix <- normalize_submatrix(matrix, 1:43, 44:57)
+  
+  # 返回最终结果
+  return(matrix)
+}
+
+# 标准化子矩阵的辅助函数
+normalize_submatrix <- function(matrix, row_range, col_range) {
+  # 提取子矩阵
+  sub_matrix <- matrix[row_range, col_range]
+  
+  # 原始概率矩阵
+  O <- sub_matrix / sum(sub_matrix)
+  
+  # 期望值矩阵
+  E <- outer(rowSums(O), colSums(O))
+  
+  # 处理 E 中的零值，避免除以零
+  Z <- (O - E) / sqrt(E)
+  Z[is.infinite(Z) | is.nan(Z)] <- 0 # 将 NaN 或 Inf 替换为 0
+  
+  # 将标准化后的子矩阵放回原矩阵
+  matrix[row_range, col_range] <- Z
+  
+  return(matrix)
+}
+
+```
+
+
+
+```{r}
+zn_matrix_usa_combined <- normalize_matrix_in_steps(numeric_matrix_usa_combined)
+zn_matrix_canada_combined <- normalize_matrix_in_steps(numeric_matrix_canada_combined)
+```
+
+
+```{r}
+
+zn_matrix_usa_ce <- normalize_matrix(numeric_matrix_usa_ce)
+zn_matrix_canada_ce  <- normalize_matrix(numeric_matrix_canada_ce)
+zn_matrix_usa_cc <- normalize_matrix(numeric_matrix_usa_cc)
+zn_matrix_usa_ii <- normalize_matrix(numeric_matrix_usa_ii)
+  
+
+zn_matrix_canada_cc  <- normalize_matrix(numeric_matrix_canada_cc)
+zn_matrix_canada_ii  <- normalize_matrix(numeric_matrix_canada_ii)
+
+zn_matrix_china_ce <- normalize_matrix(numeric_matrix_china_ce)
+```
+
+
+```{r}
+convert_two_mode <- function(matrix) {
+  # 检查输入是否为矩阵
+  if (!is.matrix(matrix)) {
+    stop("Input must be a matrix.")
+  }
+  
+  # 转换为 CC 矩阵 (Column-Column Matrix)
+  cc_matrix <- t(matrix) %*% matrix
+  
+  # 转换为 II 矩阵 (Item-Item Matrix)
+  ii_matrix <- matrix %*% t(matrix)
+  
+  # 返回列表，直接包含 CC 和 II 矩阵
+  list(cc = cc_matrix, ii = ii_matrix)
+}
+```
+
+```{r}
+zn_matrix_usa_cct <- convert_two_mode(zn_matrix_usa_ce)$cc
+
+zn_matrix_usa_iit <- convert_two_mode(zn_matrix_usa_ce)$ii
+
+zn_matrix_canada_cct <- convert_two_mode(zn_matrix_canada_ce)$cc
+
+zn_matrix_canada_iit <- convert_two_mode(zn_matrix_canada_ce)$ii
+
+zn_matrix_china_cct <- convert_two_mode(zn_matrix_china_ce)$cc
+
+zn_matrix_china_iit <- convert_two_mode(zn_matrix_china_ce)$ii
+```
+
+
+
+```{r}
+correlation_ce_usa_canada <- cor.test(as.vector(zn_matrix_usa_ce), as.vector(zn_matrix_canada_ce), method = "pearson")  # 处理 NA 的情况
+cat("Pearson Correlation Coefficient:\n", correlation_ce_usa_canada$estimate, "\n")
+cat("P-value:\n", correlation_ce_usa_canada$p.value, "\n")
+```
+
+```{r}
+correlation_ce_usa_china <- cor.test(as.vector(zn_matrix_usa_ce), as.vector(zn_matrix_china_ce), method = "pearson")  # 处理 NA 的情况
+cat("Pearson Correlation Coefficient:\n", correlation_ce_usa_china$estimate, "\n")
+cat("P-value:\n", correlation_ce_usa_china$p.value, "\n")
+```
+```{r}
+correlation_ce_ca_china <- cor.test(as.vector(zn_matrix_canada_ce), as.vector(zn_matrix_china_ce), method = "pearson")  # 处理 NA 的情况
+cat("Pearson Correlation Coefficient:\n", correlation_ce_ca_china$estimate, "\n")
+cat("P-value:\n", correlation_ce_ca_china$p.value, "\n")
+```
+
+```{r}
+gcor(zn_matrix_usa_combined, zn_matrix_canada_combined)
+
+```
+
+
+
+# qap test
+```{r}
+gcor(zn_matrix_usa_cct, zn_matrix_canada_cct)
+
+gcor(zn_matrix_usa_iit, zn_matrix_canada_iit)
+
+gcor(zn_matrix_usa_cc, zn_matrix_canada_cc)
+
+gcor(zn_matrix_usa_ii, zn_matrix_canada_ii)
+```
+```{r}
+gcor(zn_matrix_usa_cct, zn_matrix_china_cct)
+
+gcor(zn_matrix_usa_iit, zn_matrix_china_iit)
+
+gcor(zn_matrix_china_cct, zn_matrix_canada_cct)
+
+gcor(zn_matrix_china_iit, zn_matrix_canada_iit)
+```
+
+```{r}
+q_test_combined_usca <- qaptest(list(zn_matrix_usa_combined, zn_matrix_canada_combined), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_combined_usca)
+```
+
+
+```{r}
+q_test_iit_usca <- qaptest(list(zn_matrix_usa_iit, zn_matrix_canada_iit), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_iit_usca)
+```
+
+
+
+```{r}
+q_test_iit_usca <- qaptest(list(zn_matrix_usa_iit, zn_matrix_canada_iit), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_iit_usca)
+```
+The observed test value (0.659) is significantly larger than the permuted distribution, as shown by the p-values (0 and 1). This indicates a strong and significant relationship in the data.
+
+
+```{r}
+q_test_cct_usca <- qaptest(list(zn_matrix_usa_cct, zn_matrix_canada_cct), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_cct_usca)
+```
+```{r}
+q_test_cct_usch <- qaptest(list(zn_matrix_usa_cct, zn_matrix_china_cct), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_cct_usch)
+```
+
+```{r}
+q_test_iit_usch <- qaptest(list(zn_matrix_usa_iit, zn_matrix_china_iit), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_iit_usch)
+```
+
+
+```{r}
+q_test_cct_cach <- qaptest(list(zn_matrix_canada_cct, zn_matrix_china_cct), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_cct_cach)
+```
+```{r}
+q_test_iit_cach <- qaptest(list(zn_matrix_canada_iit, zn_matrix_china_iit), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_iit_cach)
+```
+
+```{r}
+q_test_cc <- qaptest(list(zn_matrix_usa_cc, zn_matrix_canada_cc), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_cc)
+```
+
+
+```{r}
+q_test_ii <- qaptest(list(zn_matrix_usa_ii, zn_matrix_canada_ii), 
+                          gcor, 
+                          g1=1, 
+                          g2=2, 
+                          reps=10000)
+summary(q_test_ii)
+```
+
+
+
+
