@@ -1,3 +1,8 @@
+"""
+first step:  code country according to the gdelt label"
+
+"""
+
 mappings = {
     "economy": [
         "ECON_TAXATION", "UNEMPLOYMENT", "ECON_BANKRUPTCY", "ECON_BOYCOTT", "ECON_COST_OF_LIVING",
